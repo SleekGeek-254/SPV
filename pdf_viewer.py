@@ -1,9 +1,10 @@
 import fitz  # PyMuPDF
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 import sys
 import subprocess
+import os
 
 class PDFViewer:
     def __init__(self, root, file_path):
@@ -80,25 +81,48 @@ class PDFViewer:
             self.current_page_index -= 1
             self.display_page(self.current_page_index)
 
-def check_current_version():
+def check_current_version(commit_hash, branch='production'):
     try:
         # Run 'git ls-remote' to get the latest commit hash of the repository
-        result = subprocess.run(['git', 'ls-remote', 'https://github.com/SleekGeek-254/byt3wager-login-auth-dev.git'], capture_output=True, text=True)
+        result = subprocess.run(['git', 'ls-remote', '--heads', 'https://github.com/SleekGeek-254/SPV.git', branch], capture_output=True, text=True)
         latest_commit_hash = result.stdout.split()[0]
-        print("Latest commit hash:", latest_commit_hash)
+        print("Latest commit hash for branch '{}':".format(branch), latest_commit_hash)
+
+        # Check if the latest commit hash matches the hardcoded one
+        if latest_commit_hash == commit_hash:
+            print("The application is up to date. Proceeding...")
+            return True
+        else:
+            print("A new version is available. Please update.")
+            return False
+
     except Exception as e:
         print("Error occurred while checking the current version:", e)
+        return False
+
+def launch_updater():
+    updater_path = os.path.join(os.path.dirname(__file__), "updater.exe")
+    if os.path.exists(updater_path):
+        subprocess.Popen(updater_path)
+    else:
+        messagebox.showerror("Updater not found", "Updater executable not found.")
 
 if __name__ == "__main__":
-    check_current_version()  # Check current version before starting the application
-
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1]
+    # Hardcoded commit hash for production
+    production_commit_hash = "c87d779bd5acd4c10ca95a2bb20ed81068fd1b6"
+    
+    if check_current_version(production_commit_hash):  # Check current version before starting the application
+        if len(sys.argv) > 1:
+            file_path = sys.argv[1]
+        else:
+            file_path = filedialog.askopenfilename(
+                title="Open PDF",
+                filetypes=[("PDF Files", "*.pdf")]
+            )
+        root = tk.Tk()
+        app = PDFViewer(root, file_path)
+        root.mainloop()
     else:
-        file_path = filedialog.askopenfilename(
-            title="Open PDF",
-            filetypes=[("PDF Files", "*.pdf")]
-        )
-    root = tk.Tk()
-    app = PDFViewer(root, file_path)
-    root.mainloop()
+        choice = messagebox.askyesno("Update Required", "A new version of the application is available. Do you want to update?")
+        if choice:
+            launch_updater()
