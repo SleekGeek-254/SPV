@@ -35,5 +35,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['D:\\Company\\SAMS\\CLIENTS\\Aircareavionics\\prod\\icon.ico'],
+    version='version_info.txt',
+    icon=['D:\\Company\\1v1MeBro\\EUTOPIA\\ZOO\\PYTHON\\PDFVIEWER\\001Dev\\prod\\icon.ico'],
 )
