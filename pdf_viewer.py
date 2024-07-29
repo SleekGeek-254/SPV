@@ -43,12 +43,12 @@ class PDFViewer:
         self.update_button.pack(side=ctk.LEFT, padx=(10, 0))
 
         # Create a print button
-        self.print_button = ctk.CTkButton(self.button_frame, text="Print", command=self.print_pdf)
+        self.print_button = ctk.CTkButton(self.button_frame, text="Print", command=self.print_pdf, state="disabled")
         self.print_button.pack(side=ctk.RIGHT, padx=(0, 10))
 
         # Create a page selection dropdown
-        self.page_selection = ctk.CTkOptionMenu(self.button_frame, values=["All Pages", "Current Page", "Custom Range"], command=self.update_print_options)
-        self.page_selection.pack(side=ctk.RIGHT, padx=10)
+        # self.page_selection = ctk.CTkOptionMenu(self.button_frame, values=["All Pages", "Current Page", "Custom Range"], command=self.update_print_options)
+        # self.page_selection.pack(side=ctk.RIGHT, padx=10)
 
         # Create an entry for custom page range (initially hidden)
         self.custom_range_entry = ctk.CTkEntry(self.button_frame, placeholder_text="e.g., 1-3, 5, 7-9")
@@ -59,22 +59,51 @@ class PDFViewer:
         self.settings_menu = ctk.CTkOptionMenu(self.button_frame, values=["Light Mode", "Dark Mode"], command=self.change_theme)
         self.settings_menu.set("Light Mode")
 
-        # Frame to hold canvas and scrollbar
+        # Frame to hold canvas and scrollbars
         self.frame = ctk.CTkFrame(root)
         self.frame.pack(expand=True, fill=ctk.BOTH)
 
         # Canvas for displaying PDF pages
         self.canvas = ctk.CTkCanvas(self.frame, width=800, height=600)
         self.canvas.pack(side=ctk.LEFT, expand=True, fill=ctk.BOTH)
-        self.update_canvas_background()  # Add this line to set initial background
 
-        # Scrollbar for navigation
-        self.scrollbar = ctk.CTkScrollbar(self.frame, orientation="vertical", command=self.on_scrollbar)
-        self.scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
+        # Vertical scrollbar for document content
+        self.content_scrollbar = ctk.CTkScrollbar(self.frame, orientation="vertical", command=self.canvas.yview)
+        self.content_scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
+        self.canvas.configure(yscrollcommand=self.content_scrollbar.set)
+
+        # Horizontal scrollbar for document content
+        self.content_hscrollbar = ctk.CTkScrollbar(self.frame, orientation="horizontal", command=self.canvas.xview)
+        self.content_hscrollbar.pack(side=ctk.BOTTOM, fill=ctk.X)
+        self.canvas.configure(xscrollcommand=self.content_hscrollbar.set)
+
+        # Vertical scrollbar for page navigation
+        self.page_scrollbar = ctk.CTkScrollbar(self.frame, orientation="vertical", command=self.on_page_scroll)
+        self.page_scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
         
-        # Page number label
-        self.page_label = ctk.CTkLabel(root, text="Page: 0 / 0", anchor="ne")
-        self.page_label.pack(side=ctk.TOP, anchor="ne", padx=10, pady=5)
+        # Create a frame for the bottom controls
+        self.bottom_frame = ctk.CTkFrame(root)
+        self.bottom_frame.pack(side=ctk.BOTTOM, fill=ctk.X, padx=10, pady=5)
+
+        # Previous button
+        self.prev_button = ctk.CTkButton(self.bottom_frame, text="Previous", command=self.prev_page, width=80)
+        self.prev_button.pack(side=ctk.LEFT, padx=(0, 5))
+
+        # Next button
+        self.next_button = ctk.CTkButton(self.bottom_frame, text="Next", command=self.next_page, width=80)
+        self.next_button.pack(side=ctk.LEFT, padx=5)
+
+        # Zoom out button
+        self.zoom_out_button = ctk.CTkButton(self.bottom_frame, text="Zoom Out", command=self.zoom_out, width=80)
+        self.zoom_out_button.pack(side=ctk.LEFT, padx=5)
+
+        # Zoom in button
+        self.zoom_in_button = ctk.CTkButton(self.bottom_frame, text="Zoom In", command=self.zoom_in, width=80)
+        self.zoom_in_button.pack(side=ctk.LEFT, padx=5)
+
+        # Page number label (moved from previous position)
+        self.page_label = ctk.CTkLabel(self.bottom_frame, text="Page: 0 / 0", anchor="center")
+        self.page_label.pack(side=ctk.RIGHT, expand=False)
 
         self.canvas.bind("<Configure>", self.on_resize)
         self.canvas.bind("<MouseWheel>", self.on_mouse_wheel)
@@ -99,12 +128,37 @@ class PDFViewer:
         elif (cnSource and cnUser and cnCatalog and cnTitle and cnPassword and fileTables):
             self.open_pdf_from_sql_wth_cn(cnSource, cnUser, cnCatalog, cnTitle, cnPassword, fileTables)
             
+    def prev_page(self):
+        if self.doc and self.current_page_index > 0:
+            self.current_page_index -= 1
+            self.display_page(self.current_page_index)
+            self.update_page_label()
+
+    def next_page(self):
+        if self.doc and self.current_page_index < len(self.doc) - 1:
+            self.current_page_index += 1
+            self.display_page(self.current_page_index)
+            self.update_page_label()
+
+    def zoom_in(self):
+        if self.doc:
+            self.zoom_level *= 1.2
+            self.zoom_level = min(self.zoom_level, 5.0)  # Limit max zoom to 500%
+            self.display_page(self.current_page_index)
+
+    def zoom_out(self):
+        if self.doc:
+            self.zoom_level /= 1.2
+            self.zoom_level = max(self.zoom_level, 0.1)  # Limit min zoom to 10%
+            self.display_page(self.current_page_index)
+            
     def check_for_updates(self):
-        production_commit_hash = "c7c52164085b53f81e7d20616e6c3ae2661ca617"
+        production_commit_hash = "2cd02bfdb807a9891bcd39ab10b23120bf5d9722"
         if not check_current_version(production_commit_hash):
             choice = messagebox.askyesno("Update Available", "A new version of the application is available. Do you want to update?")
             if choice:
                 launch_updater()
+                return
         else:
             messagebox.showinfo("Up to Date", "Your application is up to date.")
         
@@ -126,11 +180,11 @@ class PDFViewer:
         if self.doc:
             self.display_page(self.current_page_index)  # Redraw the current page
 
-    def update_print_options(self, selection):
-        if selection == "Custom Range":
-            self.custom_range_entry.pack(side=ctk.RIGHT, padx=10)
-        else:
-            self.custom_range_entry.pack_forget()
+    # def update_print_options(self, selection):
+    #     if selection == "Custom Range":
+    #         self.custom_range_entry.pack(side=ctk.RIGHT, padx=10)
+    #     else:
+    #         self.custom_range_entry.pack_forget()
             
             
     async def print_pdf_async(self, temp_doc, selected_printer):
@@ -172,23 +226,41 @@ class PDFViewer:
     def print_pdf(self):
         if self.doc:
             try:
-             
-
                 # Get available printers
                 printers = [printer[2] for printer in win32print.EnumPrinters(2) if printer[2] != "Microsoft Print to PDF"]
 
-                # Create a dialog to select a printer
+                # Create a dialog to select a printer and page range
                 printer_dialog = ctk.CTkToplevel(self.root)
-                printer_dialog.title("Select Printer")
-                printer_dialog.geometry("300x200")
+                printer_dialog.title("Print Settings")
+                printer_dialog.geometry("300x300")
 
+                # Printer selection
+                ctk.CTkLabel(printer_dialog, text="Select Printer:").pack(pady=(20, 5))
                 printer_var = ctk.StringVar(value=printers[0] if printers else "")
                 printer_menu = ctk.CTkOptionMenu(printer_dialog, values=printers, variable=printer_var)
-                printer_menu.pack(pady=20)
+                printer_menu.pack(pady=5)
 
-                def on_printer_select():
+                # Page range selection
+                ctk.CTkLabel(printer_dialog, text="Page Range:").pack(pady=(20, 5))
+                page_selection = ctk.CTkOptionMenu(printer_dialog, values=["All Pages", "Current Page", "Custom Range"])
+                page_selection.pack(pady=5)
+
+                # Custom range entry (initially hidden)
+                custom_range_entry = ctk.CTkEntry(printer_dialog, placeholder_text="e.g., 1-3, 5, 7-9")
+                custom_range_entry.pack(pady=5)
+                custom_range_entry.pack_forget()
+
+                def update_print_options(selection):
+                    if selection == "Custom Range":
+                        custom_range_entry.pack(pady=5)
+                    else:
+                        custom_range_entry.pack_forget()
+
+                page_selection.configure(command=update_print_options)
+
+                def on_print():
                     selected_printer = printer_var.get()
-                    printer_dialog.destroy()
+                    selection = page_selection.get()
 
                     # Set the selected printer as default
                     try:
@@ -196,65 +268,63 @@ class PDFViewer:
                         print(f"Default printer set to: {selected_printer}")
                     except Exception as e:
                         print(f"Error setting default printer: {e}")
-                        messagebox.showwarning("Invalid Range", f" Error setting default printer: {e}")
+                        messagebox.showwarning("Printer Error", f"Error setting default printer: {e}")
                         return
 
                     # Get print range
-                    selection = self.page_selection.get()
                     if selection == "All Pages":
                         print_range = range(len(self.doc))
                     elif selection == "Current Page":
                         print_range = [self.current_page_index]
                     elif selection == "Custom Range":
-                        custom_range = self.custom_range_entry.get()
+                        custom_range = custom_range_entry.get()
                         print_range = self.parse_page_range(custom_range)
+                        if not print_range:
+                            messagebox.showwarning("Invalid Range", "Please enter a valid page range.")
+                            return
 
-                    if print_range:
-                        # Create a temporary PDF with selected pages
-                        temp_doc = fitz.open()
-                        for page_num in print_range:
-                            temp_doc.insert_pdf(self.doc, from_page=page_num, to_page=page_num)
-   
-                        # Print the temporary PDF asynchronously
-                        temp_filename = asyncio.run(self.print_pdf_async(temp_doc, selected_printer))
-                        
-                        # self.root.after(5000, lambda: messagebox.showinfo("Print", f"Printing complete. Cleaning Cache {selected_printer}"))
-                                   # Define the cleanup function
-                        def delayed_cleanup():
-                            if temp_filename:
-                                max_retries = 100000000000000000000000
-                                retry_delay = 1  # seconds
-                                for attempt in range(max_retries):
-                                    try:
-                                        os.remove(temp_filename)
-                                        print(f"Temporary file {temp_filename} removed")
-                                        break
-                                    except PermissionError as e:
-                                        if e.winerror == 32:  # WinError 32: The process cannot access the file because it is being used by another process
-                                            if attempt < max_retries - 1:
-                                                # print(f"Failed to remove file, retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})")
-                                                time.sleep(retry_delay)
-                                            else:
-                                                print(f"Failed to remove temporary file after {max_retries} attempts: {e}")
+                    printer_dialog.destroy()
+
+                    # Create a temporary PDF with selected pages
+                    temp_doc = fitz.open()
+                    for page_num in print_range:
+                        temp_doc.insert_pdf(self.doc, from_page=page_num, to_page=page_num)
+
+                    # Print the temporary PDF asynchronously
+                    temp_filename = asyncio.run(self.print_pdf_async(temp_doc, selected_printer))
+
+                    # Define the cleanup function
+                    def delayed_cleanup():
+                        if temp_filename:
+                            max_retries = 100000000000000000000000
+                            retry_delay = 1  # seconds
+                            for attempt in range(max_retries):
+                                try:
+                                    os.remove(temp_filename)
+                                    print(f"Temporary file {temp_filename} removed")
+                                    break
+                                except PermissionError as e:
+                                    if e.winerror == 32:  # WinError 32: The process cannot access the file because it is being used by another process
+                                        if attempt < max_retries - 1:
+                                            time.sleep(retry_delay)
                                         else:
-                                            print(f"Error removing temporary file: {e}")
-                                            break
-                                    except Exception as e:
-                                        print(f"Unexpected error removing temporary file: {e}")
+                                            print(f"Failed to remove temporary file after {max_retries} attempts: {e}")
+                                    else:
+                                        print(f"Error removing temporary file: {e}")
                                         break
-                            
-                                    # Show message box after cleanup attempt
+                                except Exception as e:
+                                    print(f"Unexpected error removing temporary file: {e}")
+                                    break
+
+                            # Show message box after cleanup attempt
                             self.root.after(0, lambda: messagebox.showinfo("Print", f"Printing complete. Cleaning Cache {selected_printer}"))
 
-                        # Create and start the cleanup thread
-                        cleanup_thread = threading.Thread(target=delayed_cleanup)
-                        cleanup_thread.start()
-                        
-                    else:
-                        messagebox.showwarning("Invalid Range", "Please enter a valid page range.")
+                    # Create and start the cleanup thread
+                    cleanup_thread = threading.Thread(target=delayed_cleanup)
+                    cleanup_thread.start()
 
-                select_button = ctk.CTkButton(printer_dialog, text="Print", command=on_printer_select)
-                select_button.pack(pady=20)
+                print_button = ctk.CTkButton(printer_dialog, text="Print", command=on_print)
+                print_button.pack(pady=20)
 
                 printer_dialog.transient(self.root)
                 printer_dialog.grab_set()
@@ -336,12 +406,16 @@ class PDFViewer:
             messagebox.showerror("Error", f"Failed to open PDF from SQL: {e}")
 
     def open_pdf_from_sql_wth_cn(self, cnSource, cnUser, cnCatalog, cnTitle, cnPassword, fileTables):
+        messagebox.showinfo("Info", f"cnUser '{cnUser}'")
         try:
             conn = pyodbc.connect('Driver={SQL Server};'
                                 f'Server={cnSource};'
                                 f'Database={cnCatalog};'
                                 'UID=sa;'
                                 'PWD=Mmggit22;')
+            
+            # Check user role
+            has_printer_role = self.check_user_role(conn, cnUser)
             
             cursor = conn.cursor()
             cursor.execute(f"SELECT file_stream, name FROM {fileTables} WHERE name = ?", (cnTitle,))
@@ -353,6 +427,9 @@ class PDFViewer:
                 self.setup_scrollbar()
                 self.display_page(self.current_page_index)
                 self.update_page_label()
+                
+                # Enable or disable print button based on user role
+                self.print_button.configure(state="normal" if has_printer_role else "disabled")
             else:
                 messagebox.showerror("Error", f"No PDF found with title '{cnTitle}'")
             
@@ -364,12 +441,29 @@ class PDFViewer:
             messagebox.showerror("Error", f"Failed to open PDF from SQL with CN: {e}")
 
     # ----
+    def check_user_role(self, conn, cnUser):
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT r.name
+                FROM sys.database_role_members rm
+                JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id
+                JOIN sys.database_principals m ON rm.member_principal_id = m.principal_id
+                WHERE m.name = ?
+            """, (cnUser,))
+            roles = [row.name for row in cursor.fetchall()]
+            cursor.close()
+            return 'Printer' in roles
+        except Exception as e:
+            print(f"Error checking user role: {e}")
+            return False
+
     def setup_scrollbar(self):
         if self.doc:
-            self.scrollbar.configure(command=self.on_scrollbar)
-            self.scrollbar.set(0, 1 / len(self.doc))
+            self.page_scrollbar.configure(command=self.on_page_scroll)
+            self.page_scrollbar.set(0, 1 / len(self.doc))
 
-    def on_scrollbar(self, *args):
+    def on_page_scroll(self, *args):
         if self.doc:
             page_index = int(float(args[1]) * len(self.doc))
             if page_index != self.current_page_index:
@@ -395,54 +489,45 @@ class PDFViewer:
                 # Clear previous page
                 self.canvas.delete("all")
 
-                # Add a background rectangle
+                # Set the scroll region to accommodate the zoomed image size
+                scroll_width = max(canvas_width, img_tk.width())
+                scroll_height = max(canvas_height, img_tk.height())
+                self.canvas.configure(scrollregion=(0, 0, scroll_width, scroll_height))
+
+                # Add a background rectangle that covers the entire scroll region
                 bg_color = "gray20" if ctk.get_appearance_mode() == "Dark" else "white"
-                self.canvas.create_rectangle(0, 0, canvas_width, canvas_height, fill=bg_color, outline="")
+                self.canvas.create_rectangle(0, 0, scroll_width, scroll_height, fill=bg_color, outline="")
 
                 # Display the image
                 self.canvas.create_image(x, y, anchor=ctk.NW, image=img_tk)
                 self.canvas.image = img_tk   # Keep a reference to avoid garbage collection
 
+                # Update page navigation scrollbar
                 total_pages = len(self.doc)
-                
                 if total_pages > 1:
-                    # Enable scrolling for multi-page documents
-                    scroll_width = max(canvas_width, img_tk.width())
-                    scroll_height = max(canvas_height, img_tk.height())
-                    self.canvas.configure(scrollregion=(0, 0, scroll_width, scroll_height))
-                    
-                    # Update vertical scrollbar
                     start = page_index / (total_pages - 1)
                     end = (page_index + 1) / total_pages
-                    self.scrollbar.set(start, end)
-                    self.scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
-                    self.canvas.configure(yscrollcommand=self.scrollbar.set)
-                    
-                    # Add horizontal scrollbar if needed
-                    if img_tk.width() > canvas_width:
-                        if not hasattr(self, 'hscrollbar'):
-                            self.hscrollbar = ctk.CTkScrollbar(self.frame, orientation="horizontal")
-                            self.hscrollbar.pack(side=ctk.BOTTOM, fill=ctk.X)
-                            self.hscrollbar.configure(command=self.canvas.xview)
-                        self.hscrollbar.pack(side=ctk.BOTTOM, fill=ctk.X)
-                        self.canvas.configure(xscrollcommand=self.hscrollbar.set)
-                    elif hasattr(self, 'hscrollbar'):
-                        self.hscrollbar.pack_forget()
-                        
+                    self.page_scrollbar.set(start, end)
+                    self.page_scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
                 else:
-                    # Disable scrolling for single-page documents
-                    self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
-                    self.scrollbar.pack_forget()
-                    self.canvas.configure(yscrollcommand=None)
-                    if hasattr(self, 'hscrollbar'):
-                        self.hscrollbar.pack_forget()
-                    self.canvas.configure(xscrollcommand=None)
+                    self.page_scrollbar.pack_forget()
+
+                # Show/hide content scrollbars as needed
+                if scroll_height > canvas_height:
+                    self.content_scrollbar.pack(side=ctk.RIGHT, fill=ctk.Y)
+                else:
+                    self.content_scrollbar.pack_forget()
+
+                if scroll_width > canvas_width:
+                    self.content_hscrollbar.pack(side=ctk.BOTTOM, fill=ctk.X)
+                else:
+                    self.content_hscrollbar.pack_forget()
 
                 # Update page label
                 self.update_page_label()
 
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to display page: {e}")              
+                messagebox.showerror("Error", f"Failed to display page: {e}")
     
     def update_page_label(self):
         if self.doc:
@@ -457,13 +542,16 @@ class PDFViewer:
 
     def on_mouse_wheel(self, event):
         if self.doc:
-            # Navigate pages
-            if event.delta > 0:
-                self.current_page_index = max(0, self.current_page_index - 1)
+            # Scroll content if Ctrl is pressed, otherwise navigate pages
+            if self.ctrl_is_pressed:
+                self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
             else:
-                self.current_page_index = min(len(self.doc) - 1, self.current_page_index + 1)
-            self.display_page(self.current_page_index)
-            self.update_page_label()
+                if event.delta > 0:
+                    self.current_page_index = max(0, self.current_page_index - 1)
+                else:
+                    self.current_page_index = min(len(self.doc) - 1, self.current_page_index + 1)
+                self.display_page(self.current_page_index)
+                self.update_page_label()
 
     def on_zoom(self, event):
         if self.doc:
@@ -538,7 +626,8 @@ def launch_updater():
     if os.path.exists(updater_path):
         shell32 = ctypes.windll.shell32
         shell32.ShellExecuteW(None, "runas", updater_path, None, None, 1)
-        return
+        # Close the current application
+        sys.exit(0)
     else:
         messagebox.showerror("Updater not found", "Updater executable not found.")
 
